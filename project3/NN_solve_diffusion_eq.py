@@ -16,14 +16,36 @@ from useful_functions import *
 pi = 3.1415926535897932
 
 def neural_network(params, x, t, activation_fns):
-    n_points = x.shape[0]
-    L = len(params)
+    '''
+    Neural network function.
+    
+    Parameters
+    ----------
+    params : list of ndarrays
+        This list contains the matrices containing weights and biases for each layer. Length = L
+    x : ndarray
+        Column vector of spatial points. length n_points
+    t : ndarray
+        Column vector of time points. length n_points
+    activation_fns : list
+        List containing the activation functions for each layer. Length = L
+
+    Returns
+    -------
+    a_l : ndarray
+        Array of outputs. Shape (n_points, 1)
+
+    '''
+    
+    
+    n_points = x.shape[0] # no. of points
+    L = len(params) # no. of layers in NN
     
     # ============
     # feed forward
     # ============
     
-    a_l = np.c_[x,t]
+    a_l = np.c_[x,t] # input layer
     
     for l in range(L):
         # add vector of ones in order to include bias
@@ -35,17 +57,32 @@ def neural_network(params, x, t, activation_fns):
     return a_l
 
 def u0(x):
+    '''
+    Initial condition function.
+    '''
+    
     return np.sin(pi*x)
 
 def u_trial(x, t, params, activation_fns):
+    '''
+    Trial solution. 
+    Sum of two terms: the first satisfies the initial conditions, the second depends on the NN.
+    '''
     h2 = x*(1-x) * t * neural_network(params,x,t,activation_fns)
     return (1-t)*u0(x) + h2
 
 def u_analytic(x,t):
+    '''
+    Analytical solution of diffusion equation.
+    '''
     return np.exp(-pi**2 * t) * np.sin(pi*x)
 
 def cost(x, t, params, activation_fns):
-    
+    '''
+    Cost function.
+    Equal to the squared diffusion equation.
+    Returns the mean of the squared equation evaluated at all points (x_i, t_j)
+    '''
     Nx = x.shape[0]
     Nt = t.shape[0]
     du_x = elementwise_grad(u_trial, 0)
@@ -60,11 +97,38 @@ def cost(x, t, params, activation_fns):
 
 
 def solve_PDE(x_train, t_train, params, activation_fns, n_epochs, batch_size, eta, momentum=0.):
-    
+    '''
+    Function that solves the PDE specified by the cost function.
+
+    Parameters
+    ----------
+    x_train : ndarray
+        Array of spatial points. Shape (N_x, 1)
+    t_train : ndarray
+        Array of timepoints. Shape (N_t, 1)
+    params : list of ndarrays
+        This list contains the matrices containing weights and biases for each layer. Length = L
+    activation_fns : list
+        List containing the activation functions for each layer. Length = L
+    n_epochs : int
+        No. of epochs for which the NN is trained
+    batch_size : int
+        Size of batch used to compute the gradient of the cost
+    eta : float
+        Learning rate
+    momentum : float, optional
+        Momentum used in the gradient descent. Non-zero values gave worse results. The default is 0..
+
+    Returns
+    -------
+    params : list
+        Optimised parameters for the NN.
+
+    '''    
     L = len(params) # no. of layers excl. input layer
     Nx = x_train.shape[0] # no. of points
-    Nt = t_train.shape[0]
-    N_tot = Nx*Nt
+    Nt = t_train.shape[0] # no. of time points
+    N_tot = Nx*Nt # total no. of points
     n_batches = N_tot//batch_size
     
     print(f"Initial cost = {cost(x_train, t_train, params, activation_fns)}")
@@ -75,12 +139,12 @@ def solve_PDE(x_train, t_train, params, activation_fns, n_epochs, batch_size, et
     
     grad_P = grad(cost, 2)
     delta_params = [np.zeros_like(params_) for params_ in params] # initialise delta_P to include momentum
+    
     for epoch in trange(n_epochs):
-
         for i in range(n_batches):
             x_sel = np.random.randint(Nx, size=batch_size)
             t_sel = np.random.randint(Nt, size=batch_size)
-            x = x_train[x_sel]; t = t_train[t_sel]
+            x = x_train[x_sel]; t = t_train[t_sel] # randomly selected points
             
             # evaluate gradient(s)
             gradient = grad_P(x, t, params, activation_fns)
@@ -92,7 +156,7 @@ def solve_PDE(x_train, t_train, params, activation_fns, n_epochs, batch_size, et
             
         if epoch%(n_epochs//min(10,n_epochs)) == 0:
             c = cost(x_train, t_train, params, activation_fns)
-            if np.isnan(c):
+            if np.isnan(c): # check to see if GD has diverged
                 return
             print("Cost =", c)
     
@@ -105,10 +169,10 @@ if __name__=="__main__":
     Nt = 10 # no. of time points
     x = np.linspace(0.,1.,Nx)
     t = np.linspace(0.,1.,Nt)
-    X, T = np.meshgrid(x,t)
+    X, T = np.meshgrid(x,t) # grid of points
     
     n_neurons_list = [100, 25] # NN architecture
-    activation_fns = [sigmoid, sigmoid, lambda z: z]
+    activation_fns = [sigmoid, sigmoid, lambda z: z] # activation functions for each layer
     
     n_epochs = 25 # no. of epochs for SGD
     batch_size = 4 # size of mini batches

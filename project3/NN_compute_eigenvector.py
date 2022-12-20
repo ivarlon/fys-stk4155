@@ -14,14 +14,34 @@ from tqdm import trange
 from useful_functions import *
 
 def neural_network(params, t, activation_fns):
-    n_points = np.size(t,0)
-    L = len(params)
+    '''
+    Neural network function.
+    
+    Parameters
+    ----------
+    params : list of ndarrays
+        This list contains the matrices containing weights and biases for each layer. Length = L
+    t : ndarray
+        Array of time points. shape (N_timepoints, 1)
+    activation_fns : list
+        List containing the activation functions for each layer. Length = L
+
+    Returns
+    -------
+    a_l : ndarray
+        Array of outputs. Shape (N_timepoints, n), with nxn describing the size of the matrix
+        whose eigenvectors are estimated.
+
+    '''
+    
+    n_points = np.size(t,0) # no. of timepoints
+    L = len(params) # no. of layers in NN
     
     # ============
     # feed forward
     # ============
     
-    a_l = t
+    a_l = t # input layer
     
     for l in range(L):
         # add vector of ones in order to include bias
@@ -32,11 +52,52 @@ def neural_network(params, t, activation_fns):
     
     return a_l
 
-#x0 = np.array([-0.42470757,  0.04838288, -0.28953088,  0.77230282, -0.36467259, -0.06337738]).reshape(n,1)
 def x_trial(t, params, activation_fns, x0):
+    '''
+    Trial function
+
+    Parameters
+    ----------
+    t : ndarray
+        Array of timepoints. Shape (N_timepoints, 1)
+    params : list of ndarrays
+        This list contains the matrices containing weights and biases for each layer. Length = L
+    activation_fns : list
+        List containing the activation functions for each layer. Length = L
+    x0 : ndarray
+        Initial value. Shape (n,1)
+
+    Returns
+    -------
+    x_trial : ndarray
+        Array containing the trial x at the inputted timepoints. Shape (N_timepoints, n)
+
+    '''
     return np.outer((1-t),x0.T) + t*neural_network(params, t, activation_fns)
 
 def cost(t, params, activation_fns, A, x0):
+    '''
+    Cost function, which is equal to the square of the differential equation.
+
+    Parameters
+    ----------
+    t : ndarray
+        Array of timepoints. Shape (N_timepoints, 1)
+    params : list of ndarrays
+        This list contains the matrices containing weights and biases for each layer. Length = L
+    activation_fns : list
+        List containing the activation functions for each layer. Length = L
+    A : ndarray
+        Matrix whose eigenvectors we wish to compute.
+    x0 : ndarray
+        Initial value.
+
+    Returns
+    -------
+    cost
+        The average of the squared ODE evaluated at the timepoints t
+
+    '''
     n = A.shape[0]
     Nt = t.shape[0]
     dx_t = elementwise_grad(x_trial, 0)(t, params, activation_fns, x0)
@@ -50,10 +111,37 @@ def cost(t, params, activation_fns, A, x0):
 
 
 def solve_eigval_problem(A, x0, t_train, params, activation_fns, n_epochs, batch_size, eta):
-    
+    '''
+    Function that solves the eigenvalue problem for A.
+
+    Parameters
+    ----------
+    A : ndarray
+        Matrix whose eigenvectors we wish to compute.
+    x0 : ndarray
+        Initial value.
+    t_train : ndarray
+        Array of timepoints. Shape (N_timepoints, 1)
+    params : list of ndarrays
+        This list contains the matrices containing weights and biases for each layer. Length = L
+    activation_fns : list
+        List containing the activation functions for each layer. Length = L
+    n_epochs : int
+        No. of epochs for which the NN is trained
+    batch_size : int
+        Size of batch used to compute the gradient of the cost
+    eta : float
+        Learning rate
+
+    Returns
+    -------
+    params : list of ndarrays
+        List of optimised weights and biases for each layer
+
+    '''
     L = len(params) # no. of layers excl. input layer
-    Nt = t_train.shape[0]
-    n_batches = Nt//batch_size
+    Nt = t_train.shape[0] # no. of timepoints
+    n_batches = Nt//batch_size # no. of batches
     
     print(f"Initial cost = {cost(t_train, params, activation_fns, A, x0)}")
     
@@ -63,8 +151,6 @@ def solve_eigval_problem(A, x0, t_train, params, activation_fns, n_epochs, batch
     
     grad_P = grad(cost, 1)
     for epoch in trange(n_epochs):
-        #print(f"{epoch/n_epochs*100}%")
-
         for i in range(n_batches):
             t_sel = np.random.randint(Nt, size=batch_size)
             t = t_train[t_sel]
@@ -77,7 +163,7 @@ def solve_eigval_problem(A, x0, t_train, params, activation_fns, n_epochs, batch
             
             if epoch%(n_epochs//min(10,n_epochs)) == 0:
                 c = cost(t_train, params, activation_fns, A, x0)
-                if np.isnan(c):
+                if np.isnan(c): # check to see if GD has diverged
                     return
                 print("Cost =", c)
     
@@ -86,21 +172,27 @@ def solve_eigval_problem(A, x0, t_train, params, activation_fns, n_epochs, batch
 
 if __name__ == "__main__":
     
-    Nt = 200
-    t = np.linspace(0,1,Nt).reshape(Nt,1)
-    n_neurons_list = [4,8]
-    activation_fns = [sigmoid, sigmoid, lambda z: z]
+    Nt = 200 # no. of timepoints on which to train
+    t = np.linspace(0,1,Nt).reshape(Nt,1) # array of timepoints
+    n_neurons_list = [4,8] # architecture of NN
+    activation_fns = [sigmoid, sigmoid, lambda z: z] # activation functions for each layer
     n_epochs = 2000
     batch_size = 20
-    eta = 0.001
+    eta = 0.001 # learning rate
     
-    n = 6
+    n = 6 # size of matrix
     np.random.seed(0)
     Q = np.random.randn(n,n)
-    A = 0.5*(Q.T + Q)
+    A = 0.5*(Q.T + Q) # symmetric matrix
+    
+    
+    # ==============================================
+    # creating initial value. Uncomment the line below and comment out the line below it 
+    # to get a random initial value.
+    # =============================================
     
     #x0 = np.random.randn(n).reshape(n,1)
-    x0 = np.array([1.23029068, 1.20237985, -0.38732682, -0.30230275, -1.04855297, -1.42001794]).reshape(n,1)
+    x0 = np.array([1.23029068, 1.20237985, -0.38732682, -0.30230275, -1.04855297, -1.42001794]).reshape(n,1) # this gives convergence of the method
     
     input_shape = 1 # time t
     output_shape = n # vector x
@@ -108,15 +200,19 @@ if __name__ == "__main__":
     
     params = solve_eigval_problem(A, x0, t, params, activation_fns, n_epochs, batch_size, eta)
     
+    # now check if gradient descent gave divergent parameters
     if type(params) is type(None):
         print("Parameters diverged. Retune hyperparameters or choose a different x0")
     
     else:
+        # compute actual eigvals/eigvecs
         eigvals, eigvecs = np.linalg.eigh(A)
         
+        # estimate eigenvector at t=1
         x_tilde = x_trial(np.array([[1.]]), params, activation_fns, x0).reshape(n,1)
         x_tilde = x_tilde/np.sqrt(x_tilde.T@x_tilde) # normalise
         
+        # estimated eigenvalue
         lambda_tilde = x_tilde.T@(A@x_tilde)
         
         # check to see if this is an eigenvector
@@ -157,5 +253,5 @@ if __name__ == "__main__":
             ax.set_ylabel("$\\tilde{x}_i$")
             ax.grid()
             fig.tight_layout()
-            fig.savefig("x_evolution.pdf")
+            #fig.savefig("x_evolution.pdf")
             plt.show()
